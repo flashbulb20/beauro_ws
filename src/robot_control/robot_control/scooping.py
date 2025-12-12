@@ -55,7 +55,7 @@ def perform_task():
     print("[INFO] Returning HOME...")
     movej(HOME_POSE, vel=VELOCITY, acc=ACC)
     print("[INFO] Opening grip...")
-    set_digital_output(1, 0)
+    set_digital_output(1, 1)
     set_digital_output(2, 1)
     print("[INFO] Move-J towards spoon...")
     movej(spoon_up1, vel=VELOCITY, acc=ACC)
@@ -64,7 +64,7 @@ def perform_task():
 
     # Close grip
     print("[INFO] Closing grip...")
-    set_digital_output(1, 1)
+    set_digital_output(1, 0)
     set_digital_output(2, 0)
 
     print("[INFO] Lifting before next motion...")

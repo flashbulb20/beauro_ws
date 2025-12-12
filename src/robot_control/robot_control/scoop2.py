@@ -53,7 +53,7 @@ def perform_task():
     print("[INFO] Returning HOME...")
     movej(HOME_POSE, vel=VELOCITY, acc=ACC)
     print("[INFO] Opening grip...")
-    set_digital_output(1, 0)
+    set_digital_output(1, 1)
     set_digital_output(2, 1)
     print("[INFO] Move-J towards spoon...")
     movej(spoon_up1, vel=VELOCITY, acc=ACC)
@@ -62,7 +62,7 @@ def perform_task():
 
     # Close grip
     print("[INFO] Closing grip...")
-    set_digital_output(1, 1)
+    set_digital_output(1, 0)
     set_digital_output(2, 0)
 
     print("[INFO] Lifting before next motion...")
@@ -73,7 +73,8 @@ def perform_task():
     movej(scoop_1, vel=VELOCITY, acc=ACC)
 
     curr_joints = get_current_posj()
-    rotate_joints = [curr_joints[0], curr_joints[1], curr_joints[2], curr_joints[3], curr_joints[4], curr_joints[5]-40.0]
+    ROTATION_ANGLE = 60.0   # 6번 조인트 회전 각도
+    rotate_joints = [curr_joints[0], curr_joints[1], curr_joints[2], curr_joints[3], curr_joints[4], curr_joints[5]-ROTATION_ANGLE]
     print("[INFO] Rotating Joint6 for scooping...")
     movej(rotate_joints, vel=20, acc=30)
 

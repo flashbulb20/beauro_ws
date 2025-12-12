@@ -31,7 +31,9 @@ setup(
             "pipetting = robot_control.pipetting:main",
             "pick_spoon = robot_control.pick_spoon:main",
             "scooping = robot_control.scooping:main",
-            "scoop2 = robot_control.scoop2:main"
+            "scoop2 = robot_control.scoop2:main",
+            "spoon_flatten = robot_control.spoon_flatten:main",
+            "flatten2 = robot_control.flatten2:main"
         ],
     },
 )
