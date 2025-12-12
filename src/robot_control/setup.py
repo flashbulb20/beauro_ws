@@ -26,9 +26,12 @@ setup(
         'console_scripts': [
             "go_home = robot_control.go_home:main",
             "open_grip = robot_control.open_grip:main",
-            "close_grip = robot_control.close_grip:main"
+            "close_grip = robot_control.close_grip:main",
+            "pick_spoid = robot_control.pick_spoid:main",
+            "pipetting = robot_control.pipetting:main",
             "pick_spoon = robot_control.pick_spoon:main",
-            "scooping = robot_control.scooping:main"
+            "scooping = robot_control.scooping:main",
+            "scoop2 = robot_control.scoop2:main"
         ],
     },
 )

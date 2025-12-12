@@ -40,7 +40,7 @@ def initialize_robot():
 def perform_task():
     """로봇이 수행할 작업"""
     print("Performing task...")
-    from DSR_ROBOT2 import posx,posj,movej,movel,movec,set_digital_output
+    from DSR_ROBOT2 import posx,posj,movej,movel,get_current_posj,set_digital_output
 
     # Robot coordinates
     HOME_POSE = [0, 0, 90, 0, 90, 0]
@@ -49,8 +49,6 @@ def perform_task():
     spoon_up2 = posx([407.358, -130.353, 600.97, 137.843, -179.706, 138.161])   # 스쿠핑 전에 위로 올릴 위치
     scoop_up = posj([28.458, 18.254, 102.896, -126.347, 44.212, 47.24])
     scoop_1 = posj([18.909, 15.484, 97.19, -21.628, 18.737, -60.757])
-    scoop_2 = posx([491.46, 168.075, 275.056, 6.672, 138.633, -90.893])
-    scoop_3 = posx([498.045, 176.155, 333.677, 0.318, 154.135, -85.958])
 
     print("[INFO] Returning HOME...")
     movej(HOME_POSE, vel=VELOCITY, acc=ACC)
@@ -73,13 +71,17 @@ def perform_task():
     movej(scoop_up, vel=VELOCITY, acc=ACC)
     print("[INFO] Move-J before Move-C...")
     movej(scoop_1, vel=VELOCITY, acc=ACC)
-    movec(scoop_2, scoop_3, time=5)
+
+    curr_joints = get_current_posj()
+    rotate_joints = [curr_joints[0], curr_joints[1], curr_joints[2], curr_joints[3], curr_joints[4], curr_joints[5]-40.0]
+    print("[INFO] Rotating Joint6 for scooping...")
+    movej(rotate_joints, vel=20, acc=30)
 
 
 def main(args=None):
     """메인 함수: ROS2 노드 초기화 및 동작 수행"""
     rclpy.init(args=args)
-    node = rclpy.create_node("scooping", namespace=ROBOT_ID)
+    node = rclpy.create_node("scoop2", namespace=ROBOT_ID)
 
     # DR_init에 노드 설정
     DR_init.__dsr__node = node
