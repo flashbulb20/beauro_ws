@@ -20,7 +20,6 @@ ACC = 80
 # 트레이 설정
 TRAY_PITCH_X = 57.0
 TRAY_PITCH_Y = 38.0
-TRAY_Z_OFFSET = 0.0
 
 def initialize_robot():
     from DSR_ROBOT2 import set_tool, set_tcp
@@ -49,7 +48,19 @@ def get_tray_pose(base_pose, tray_idx):
     col = idx % 2
     xt = x + (col * TRAY_PITCH_X)
     yt = y - (row * TRAY_PITCH_Y)
-    return posx([xt, yt, z + TRAY_Z_OFFSET, rx, ry, rz])
+    return posx([xt, yt, z, rx, ry, rz])
+
+def offset_posx(pose, dx, dy):
+    from DSR_ROBOT2 import posx
+    return posx([
+        pose[0] + dx,
+        pose[1] + dy,
+        pose[2],
+        pose[3],
+        pose[4],
+        pose[5],
+    ])
+
 
 def flatten_and_shake(center_pose):
     from DSR_ROBOT2 import movel, posx
@@ -62,60 +73,79 @@ def flatten_and_shake(center_pose):
     movel(posx([x, y, z, rx, ry, rz]), vel=VEL_MOVE, acc=ACC)
 
 def execute_sticks(library, recipe):
-    from DSR_ROBOT2 import posx, posj, movel, movej, movec, wait, get_current_posx
+    from DSR_ROBOT2 import posx, posj, movel, movej
 
-    SAFE_Z_OFFSET = 160
-    MIXING_ROTATIONS = 3
-    NUM_MIXING_WELLS = 6
-    
     HOME_POSE = posj([0, 0, 90, 0, 90, 0])
     stick_poses = library["stick"]
+
     GRAB = posx(stick_poses["grab"]["posx"])
     GRAB_UP = posx(stick_poses["grab_up"]["posx"])
     TRAY_BASE = posx(stick_poses["tray"]["posx"])
-    STIR_POSES = posx(stick_poses["stir"]["posx"])
+    STIR_POSES_BASE = [posx(p) for p in stick_poses["stir"]["posx"]]
     DROP = posx(stick_poses["drop"]["posx"])
 
-    trays = recipe["trays"] # Dictionary 형태 가정
+    trays = recipe["trays"]
+
+    movej(HOME_POSE, vel=VEL_MOVE, acc=ACC)
+
     for t_idx in trays:
         tray_idx = int(t_idx)
 
-        p_tray = get_tray_pose(TRAY_BASE, tray_idx)
-        p_tray_down = posx(list(p_tray))
-
-        # 로봇 초기화
-        movej(HOME_POSE, vel=VEL_MOVE, acc=ACC)
         gripper_control("init")
 
-        # 스틱 잡기
         movel(GRAB_UP, vel=VEL_MOVE, acc=ACC)
         movel(GRAB, vel=VEL_WORK, acc=ACC)
-        gripper_control("squeeze") 
+        gripper_control("squeeze")
         movel(GRAB_UP, vel=VEL_MOVE, acc=ACC)
-        
-        # 트레이 섞기 수행
-        for i in range(NUM_MIXING_WELLS):
-            well_idx = i + 1
 
-            movel(p_tray, vel=VEL_MOVE, acc=ACC) 
+        p_tray = get_tray_pose(TRAY_BASE, tray_idx)
+        p_tray_up = posx([
+            p_tray[0], p_tray[1], p_tray[2] + 120,
+            p_tray[3], p_tray[4], p_tray[5]
+        ])
+        p_tray_down = posx([
+            p_tray[0], p_tray[1], p_tray[2] - 90,
+            p_tray[3], p_tray[4], p_tray[5]
+        ])
+
+        dx = p_tray[0] - TRAY_BASE[0]
+        dy = p_tray[1] - TRAY_BASE[1]
+
+        stir_poses_tray = [
+            offset_posx(p, dx, dy) for p in STIR_POSES_BASE
+        ]
+
+        if tray_idx == 1:
+            # 1번 트레이: 기존 방식 유지
+            movel(p_tray, vel=VEL_MOVE, acc=ACC)
             movel(p_tray_down, vel=VEL_WORK, acc=ACC)
-            
-            print(f"Well #{well_idx} : {MIXING_ROTATIONS}회 직선 왕복 휘젓기 시작 (총 40mm 왕복)")
+        else:
+            # 2~6번 트레이: 위에서 접근
+            movel(p_tray_up, vel=VEL_MOVE, acc=ACC)
+            movel(p_tray, vel=VEL_MOVE, acc=ACC)
+            movel(p_tray_down, vel=VEL_WORK, acc=ACC)
 
-            for _ in range(3):
-                for p in STIR_POSES:
-                    movel(p, vel=VEL_WORK, acc=ACC, radius=10)
+        for _ in range(3):
+            for p in stir_poses_tray:
+                movel(p, vel=VEL_WORK, acc=ACC, radius=10)
 
-            movel(p_tray, vel=VEL_WORK, acc=ACC)
+        if tray_idx == 1:
+            movel(p_tray, vel=VEL_MOVE, acc=ACC)
+        else:
+            movel(p_tray, vel=VEL_MOVE, acc=ACC)
+            movel(p_tray_up, vel=VEL_MOVE, acc=ACC)
 
-        # 스틱 내려놓기
-        movel(DROP, vel=VEL_WORK, acc=ACC)
-        movel(posx([DROP[0], DROP[1], DROP[2] - 158] + DROP[3:]))
+        movel(DROP, vel=VEL_MOVE, acc=ACC)
+        movel(posx([
+            DROP[0], DROP[1], DROP[2] - 158,
+            DROP[3], DROP[4], DROP[5]
+        ]), vel=VEL_WORK, acc=ACC)
+
         gripper_control("init")
-
-        movel(DROP, vel=VEL_WORK, acc=ACC)
+        movel(DROP, vel=VEL_MOVE, acc=ACC)
 
     movej(HOME_POSE, vel=VEL_MOVE, acc=ACC)
+
 
 def main(args=None):
     rclpy.init(args=args)
