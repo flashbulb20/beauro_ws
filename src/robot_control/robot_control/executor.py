@@ -12,7 +12,7 @@ ROBOT_TOOL = "Tool Weight"
 ROBOT_TCP = "GripperDA_v1"
 
 # 속도 설정
-VEL_MOVE = 250
+VEL_MOVE = 1000
 VEL_WORK = 150   # 작업 시 천천히
 ACC = 80
 
@@ -20,9 +20,8 @@ DR_init.__dsr__id = ROBOT_ID
 DR_init.__dsr__model = ROBOT_MODEL
 
 # 트레이 설정 (2x3)
-TRAY_PITCH_X = 57.0  # 구멍 간격 (mm) - [수정됨: 이전 대화 반영]
-TRAY_PITCH_Y = 38.0  
-TRAY_Z_OFFSET = 0.0  # 트레이 기준 높이 보정
+TRAY_PITCH_X = 57.0  # 구멍 간격 (mm)
+TRAY_PITCH_Y = 38.0
 
 # ==========================================
 # 2. 공통 유틸리티 함수 (Utility)
@@ -50,11 +49,38 @@ def get_tray_pose(base_pose, tray_idx):
     col = idx % 2
 
     # 좌표 계산 (팀장님 코드 로직 + Pitch 보정)
-    # X축은 증가(+), Y축은 감소(-) 방향 가정 (현장 상황에 맞춰 부호 확인!)
     xt = x + (col * TRAY_PITCH_X)
     yt = y - (row * TRAY_PITCH_Y)
     
-    return posx([xt, yt, z + TRAY_Z_OFFSET, rx, ry, rz])
+    return posx([xt, yt, z, rx, ry, rz])
+
+def make_stir_pose(base_stir, p_tray_down, TRAY_BASE):
+    from DSR_ROBOT2 import posx
+
+    dx = p_tray_down[0] - TRAY_BASE[0]
+    dy = p_tray_down[1] - TRAY_BASE[1]
+
+    return posx([
+        base_stir[0] + dx,
+        base_stir[1] + dy,
+        p_tray_down[2],
+        base_stir[3],
+        base_stir[4],
+        base_stir[5],
+    ])
+
+def flatten_and_shake(center_pose):
+    """파우더 평탄화 (좌우 흔들기)"""
+    from DSR_ROBOT2 import movel, posx
+    x, y, z, rx, ry, rz = center_pose
+    shake_width = 5.0 # mm
+    
+    # 쉐이킹 동작 (빠르게)
+    movel(posx([x, y, z, rx, ry, rz]), vel=VEL_MOVE, acc=ACC)
+    for _ in range(5):
+        movel(posx([x+shake_width, y, z, rx, ry, rz]), vel=VEL_MOVE, acc=ACC)
+        movel(posx([x-shake_width, y, z, rx, ry, rz]), vel=VEL_MOVE, acc=ACC)
+    movel(posx([x, y, z, rx, ry, rz]), vel=VEL_MOVE, acc=ACC)
 
 def gripper_control(mode):
     """그리퍼 통합 제어"""
@@ -165,16 +191,17 @@ def execute_powder(library, recipe):
     powder_key = recipe["selection"]["powder"]
     pow_data = library["powders"][powder_key]["poses"]
     
-    p_grab = posx(pow_data["grab"]["value"])
+    p_grab = posx(pow_data["grab"]["posx"])
     xg, yg, zg, rxg, ryg, rzg = p_grab
 
-    p_bowl = posx(pow_data["bowl"]["value"])
-    p_scoop = posj(pow_data["scoop"]["value"])
-    p_flat = posx(pow_data["flat"]["value"])
+    p_bowl = posx(pow_data["bowl"]["posx"])
+    p_scoop_1 = posj(pow_data["scoop_1"]["posj"])
+    p_scoop_2 = posj(pow_data["scoop_2"]["posj"])
+    p_scoop_3 = posj(pow_data["scoop_3"]["posj"])
+    p_flat = posx(pow_data["flat"]["posx"])
     
-    # [수정] YAML에서 새로 받은 트레이 좌표를 로드
-    p_tray_x_list = pow_data["trays"]["posx"]
-    p_tray_j_list = pow_data["trays"]["posj"]
+    p_tray_base = pow_data["tray_base"]["posx"]
+    p_pour_list = pow_data["pour"]["posj"]
 
     gripper_control("init")
 
@@ -183,9 +210,15 @@ def execute_powder(library, recipe):
     movel(posx([xg, yg, zg+80, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
     movel(p_grab, vel=VEL_WORK, acc=ACC)
     gripper_control("squeeze") # 스푼을 꽉 잡음 (Squeeze 모드 사용 가정)
-    # 왼쪽으로 살짝 빼기
-    movel(posx([xg-80, yg, zg, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
-    movel(posx([xg-80, yg, zg+90, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
+
+    if powder_key == "powder_A":
+        # 왼쪽으로 살짝 빼기
+        movel(posx([xg-40, yg, zg, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
+        movel(posx([xg-40, yg, zg+110, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
+    else:
+        # 오른쪽으로 살짝 빼기
+        movel(posx([xg+40, yg, zg, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
+        movel(posx([xg+40, yg, zg+110, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
 
     trays = recipe["trays"]
     for t_idx, t_cfg in trays.items():
@@ -194,29 +227,21 @@ def execute_powder(library, recipe):
         
         tray_idx = int(t_idx)
         print(f">> Processing Tray #{tray_idx} (Count: {count})")
-        
-        # [수정] 트레이 좌표를 리스트에서 직접 가져와 posx 객체로 변환
-        # tray_idx는 1부터 시작하므로 인덱스는 tray_idx - 1
-        p_tray_raw = p_tray_x_list[tray_idx - 1]
-        p_tray = posx(p_tray_raw)
-        
-        p_tray_j_raw = p_tray_j_list[tray_idx - 1]
-        p_tray_j_target = posj(p_tray_j_raw)
+
+        p_tray = get_tray_pose(p_tray_base, tray_idx)
+        p_pour = p_pour_list[tray_idx]
 
         for c in range(count):
-            # 1) 스쿠핑 (Scooping) - 개선된 동작
-            # Bowl 위로 이동
             print("[INFO] 보울로 이동")
             movel(p_bowl, vel=VEL_MOVE, acc=ACC) 
             
-            # [동작] 내려가서 -> 앞으로 긁으며 -> 올리기 (J-Shape)
             print("[INFO] 스쿠핑 준비")
-            movej(p_scoop, vel=VEL_WORK, acc=ACC)
+            movej(p_scoop_1, vel=VEL_WORK, acc=ACC)
             
             # 긁기/회전 동작
             print("[INFO] 스쿠핑")
-            s1, s2, s3, s4, s5, s6 = pow_data["scoop"]["value"]
-            movej(posj([s1, s2, s3, s4, s5, s6+90]), vel=VEL_MOVE, acc=ACC)
+            movej(p_scoop_2, vel=VEL_WORK, acc=ACC)
+            movej(p_scoop_3, vel=VEL_WORK, acc=ACC)
             
             # 들어올리기 (Up)
             print("[INFO] 스푼 들어올리기")
@@ -229,22 +254,14 @@ def execute_powder(library, recipe):
             # 2) 붓기 (Pouring)
             print(f"{c+1}번째 붓기")
             
-            # 붓기 시작 위치 (Joint Target)로 이동
-            xf, yf, zf, rxf, ryf, rzf = list(p_flat) 
-            # 트레이 위치 (p_tray_raw)
-            xt, yt, zt, rxt, ryt, rzt = p_tray_raw
-            
-            # 1. 트레이 위 안전 지점 계산 (p_flat의 방향 유지)
-            p_tray_approach_safe = posx([xt, yt, zt + 80, rxf, ryf, rzf]) 
-            
             print("[INFO] 안전 이송 포즈로 이동 (J6 회전 없이)")
-            movel(p_tray_approach_safe, vel=VEL_MOVE, acc=ACC)
+            movel(p_tray, vel=VEL_MOVE, acc=ACC)
 
             print("[INFO] 붓기 준비 포즈로 이동")
-            movej(p_tray_j_target, vel=VEL_MOVE, acc=ACC)
+            movej(p_pour, vel=VEL_MOVE, acc=ACC)
             
             # 6번 조인트 회전으로 붓기 시작
-            j1, j2, j3, j4, j5, j6 = p_tray_j_raw
+            j1, j2, j3, j4, j5, j6 = p_pour
             p_pour_j = posj([j1, j2, j3, j4, j5, j6-90])
             print("[INFO] 붓기")
             movej(p_pour_j, vel=VEL_WORK, acc=ACC)
@@ -255,7 +272,7 @@ def execute_powder(library, recipe):
                 movej(posj([j1, j2, j3, j4, j5, j6-90 + 5.0]), vel=VEL_WORK, acc=ACC)
                 movej(posj([j1, j2, j3, j4, j5, j6-90 - 5.0]), vel=VEL_WORK, acc=ACC)
             
-            movel(p_tray_j_target, vel=VEL_MOVE, acc=ACC) # 복귀
+            movel(p_tray, vel=VEL_MOVE, acc=ACC) # 복귀
 
     # [스푼 정리]
     print("[INFO] 스푼 정리")
@@ -265,25 +282,68 @@ def execute_powder(library, recipe):
     gripper_control("init")
     movej(posj([0, 0, 90, 0, 90, 0]), vel=VEL_MOVE, acc=ACC) # HOME
 
-def flatten_and_shake(center_pose):
-    """파우더 평탄화 (좌우 흔들기)"""
-    from DSR_ROBOT2 import movel, posx
-    x, y, z, rx, ry, rz = center_pose
-    shake_width = 5.0 # mm
-    
-    # 쉐이킹 동작 (빠르게)
-    movel(posx([x, y, z, rx, ry, rz]), vel=VEL_MOVE, acc=ACC)
-    for _ in range(5):
-        movel(posx([x+shake_width, y, z, rx, ry, rz]), vel=VEL_MOVE, acc=ACC)
-        movel(posx([x-shake_width, y, z, rx, ry, rz]), vel=VEL_MOVE, acc=ACC)
-    movel(posx([x, y, z, rx, ry, rz]), vel=VEL_MOVE, acc=ACC)
+def execute_sticks(library, recipe):
+    from DSR_ROBOT2 import posx, posj, movel, movej, wait, DR_MV_RA_DUPLICATE
 
-def rel_move(delta_list, ref_pos):
-    """상대 이동 헬퍼 함수"""
-    from DSR_ROBOT2 import movel, posx
-    # 현재 위치에서 delta만큼 이동 (간단 구현)
-    target = [ref_pos[i] + delta_list[i] for i in range(6)]
-    movel(posx(target), vel=100, acc=100)
+    HOME_POSE = posj([0, 0, 90, 0, 90, 0])
+    stick_poses = library["stick"]
+
+    GRAB = posx(stick_poses["grab"]["posx"])
+    GRAB_UP = posx(stick_poses["grab_up"]["posx"])
+    TRAY_BASE = posx(stick_poses["tray"]["posx"])
+    STIR_POSES_BASE = [posx(p) for p in stick_poses["stir"]["posx"]]
+    DROP = posx(stick_poses["drop"]["posx"])
+
+    TRAY_UP_Z, TRAY_DOWN_Z = 550, 427
+
+    trays = recipe["trays"]
+
+    movej(HOME_POSE, vel=VEL_MOVE, acc=ACC)
+
+    for t_idx in trays:
+        tray_idx = int(t_idx)
+
+        gripper_control("init")
+
+        movel(GRAB_UP, vel=VEL_MOVE, acc=ACC)
+        movel(GRAB, vel=VEL_WORK, acc=ACC)
+        gripper_control("squeeze")
+        movel(GRAB_UP, vel=VEL_MOVE, acc=ACC)
+
+        p_tray = get_tray_pose(TRAY_BASE, tray_idx)
+        p_tray_up = posx([
+            p_tray[0], p_tray[1], TRAY_UP_Z,
+            p_tray[3], p_tray[4], p_tray[5],
+        ])
+        p_tray_down = posx([
+            p_tray[0], p_tray[1], TRAY_DOWN_Z,
+            p_tray[3], p_tray[4], p_tray[5]
+        ])
+
+        stir_poses_tray = [
+            make_stir_pose(p, p_tray_down, TRAY_BASE)
+            for p in STIR_POSES_BASE
+        ]
+
+        movel(p_tray_up, vel=VEL_MOVE, acc=ACC)
+        movel(p_tray_down, vel=VEL_WORK, acc=ACC)
+
+        for _ in range(3):
+            for p in stir_poses_tray:
+                movel(p, vel=VEL_WORK, acc=ACC, radius=10, ra=DR_MV_RA_DUPLICATE)
+
+        movel(p_tray_up, vel=VEL_MOVE, acc=ACC)
+
+        movel(DROP, vel=VEL_MOVE, acc=ACC)
+        movel(posx([
+            DROP[0], DROP[1], DROP[2] - 158,
+            DROP[3], DROP[4], DROP[5]
+        ]), vel=VEL_WORK, acc=ACC)
+
+        gripper_control("init")
+        movel(DROP, vel=VEL_MOVE, acc=ACC)
+
+    movej(HOME_POSE, vel=VEL_MOVE, acc=ACC)
 
 
 def main(args=None):
@@ -302,7 +362,7 @@ def main(args=None):
         recipe = load_yaml(yaml_path_recipe)
 
         if library and recipe:
-            # execute_liquid(library, recipe)
+            execute_liquid(library, recipe)
             execute_powder(library, recipe)
             print("\n[SUCCESS] All recipes execution finished.")
         else:
