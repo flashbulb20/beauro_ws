@@ -35,7 +35,8 @@ setup(
             "spoon_flatten = robot_control.spoon_flatten:main",
             "flatten2 = robot_control.flatten2:main",
             "executor = robot_control.executor:main",
-            "executor_orig = robot_control.executor_orig:main"
+            "executor_orig = robot_control.executor_orig:main",
+            "chopsticks = robot_control.chopsticks:main"
         ],
     },
 )

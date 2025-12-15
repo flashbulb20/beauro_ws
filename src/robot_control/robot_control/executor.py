@@ -354,6 +354,36 @@ def execute_sticks(library, recipe):
 
     movej(HOME_POSE, vel=VEL_MOVE, acc=ACC)
 
+def execute_tray(library):
+    from DSR_ROBOT2 import posx, posj, movel, movej
+
+    HOME_POSE = posj([0, 0, 90, 0, 90, 0])
+    stick_poses = library["tray_out"]
+
+    READY_1 = posx(stick_poses["ready_1"]["posx"])
+    READY_2 = posx(stick_poses["ready_2"]["posx"])
+    GRAB = posx(stick_poses["grab"]["posx"])
+    DROP = posx(stick_poses["drop"]["posx"])
+    FINISH = posx(stick_poses["finished"]["posx"])
+
+    gripper_control("init")
+
+    movel(READY_1, vel=VEL_MOVE, acc=ACC)
+    movel(READY_2, vel=VEL_MOVE, acc=ACC)
+    movel(GRAB, vel=VEL_MOVE, acc=ACC)
+
+    gripper_control("hold")
+
+    movel(posx(GRAB[0:2] + [GRAB[2] + 100] + GRAB[3:6]), vel=VEL_MOVE, acc=ACC)
+    movel(DROP, vel=VEL_MOVE, acc=ACC)
+
+    gripper_control("init")
+
+    movel(FINISH, vel=VEL_MOVE, acc=ACC)
+    movel(posx(FINISH[0:2] + [FINISH[2] + 80] + FINISH[3:6]), vel=VEL_MOVE, acc=ACC)
+
+    movej(HOME_POSE, vel=VEL_MOVE, acc=ACC)
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -372,8 +402,9 @@ def main(args=None):
 
         if library and recipe:
             # execute_liquid(library, recipe)
-            execute_powder(library, recipe)
-            execute_sticks(library, recipe)
+            # execute_powder(library, recipe)
+            # execute_sticks(library, recipe)
+            execute_tray(library)
             print("\n[SUCCESS] All recipes execution finished.")
         else:
             print("[ERROR] Failed to load YAML files.")
