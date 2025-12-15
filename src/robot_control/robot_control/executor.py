@@ -151,9 +151,10 @@ def execute_liquid(library, recipe):
         
         # 타겟 좌표 계산
         p_tray = get_tray_pose(tray_base_raw, tray_idx)
-        p_tray_down = posx(list(p_tray))
-        p_tray_down[2] -= 50.0 # 깊이 조정
-
+        # p_tray_down = posx(list(p_tray))
+        # p_tray_down[2] -= 50.0 # 깊이 조정
+        p_tray_up = posx(list(p_tray))
+        p_tray_up[2] += 50.0 # 깊이 조정
         for c in range(count):
             # 1) 흡입 (Suction) - v2.0 로직
             print(f"  Loop {c+1}: Suction")
@@ -165,13 +166,13 @@ def execute_liquid(library, recipe):
 
             # 2) 배출 (Dispense)
             print(f"  Loop {c+1}: Dispense")
-            movel(p_tray, vel=VEL_MOVE, acc=ACC)
-            movel(p_tray_down, vel=VEL_WORK, acc=ACC)
+            movel(p_tray_up, vel=VEL_MOVE, acc=ACC)
+            movel(p_tray, vel=VEL_WORK, acc=ACC)
             gripper_control("squeeze") # 1차 배출
             gripper_control("hold")    # 잔여물 털기
             gripper_control("squeeze") # 2차 배출
             gripper_control("hold")    # 원복
-            movel(p_tray, vel=VEL_MOVE, acc=ACC)
+            movel(p_tray_up, vel=VEL_MOVE, acc=ACC)
 
     # [스포이드 정리]
     print("Returning Spoid")
@@ -209,16 +210,16 @@ def execute_powder(library, recipe):
     print(f"Picking Spoon: {powder_key}")
     movel(posx([xg, yg, zg+80, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
     movel(p_grab, vel=VEL_WORK, acc=ACC)
-    gripper_control("squeeze") # 스푼을 꽉 잡음 (Squeeze 모드 사용 가정)
+    gripper_control("squeeze")
 
+    # 스푼 들기 전에 좌/우로 살짝 빼기
     if powder_key == "powder_A":
-        # 왼쪽으로 살짝 빼기
-        movel(posx([xg-40, yg, zg, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
-        movel(posx([xg-40, yg, zg+110, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
+        spoon_shift = -40
     else:
-        # 오른쪽으로 살짝 빼기
-        movel(posx([xg+40, yg, zg, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
-        movel(posx([xg+40, yg, zg+110, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
+        spoon_shift = 40
+        
+    movel(posx([xg + spoon_shift, yg, zg, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
+    movel(posx([xg + spoon_shift, yg, zg+110, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
 
     trays = recipe["trays"]
     for t_idx, t_cfg in trays.items():
@@ -229,7 +230,7 @@ def execute_powder(library, recipe):
         print(f">> Processing Tray #{tray_idx} (Count: {count})")
 
         p_tray = get_tray_pose(p_tray_base, tray_idx)
-        p_pour = posj(p_pour_list[tray_idx])
+        p_pour = posj(p_pour_list[tray_idx - 1])
 
         for c in range(count):
             print("[INFO] 보울로 이동")
@@ -261,23 +262,28 @@ def execute_powder(library, recipe):
             movej(p_pour, vel=VEL_MOVE, acc=ACC)
             
             # 6번 조인트 회전으로 붓기 시작
+            if powder_key == "powder_A":
+                POUR_ANGLE = -90
+            else:
+                POUR_ANGLE = 90
+
             j1, j2, j3, j4, j5, j6 = p_pour
-            p_pour_j = posj([j1, j2, j3, j4, j5, j6-90])
+            p_pour_j = posj([j1, j2, j3, j4, j5, j6+POUR_ANGLE])
             print("[INFO] 붓기")
             movej(p_pour_j, vel=VEL_WORK, acc=ACC)
             
             # 털기 (Shake)
             print("[INFO] 잔여물 털기")
             for _ in range(3):
-                movej(posj([j1, j2, j3, j4, j5, j6-90 + 5.0]), vel=VEL_WORK, acc=ACC)
-                movej(posj([j1, j2, j3, j4, j5, j6-90 - 5.0]), vel=VEL_WORK, acc=ACC)
+                movej(posj([j1, j2, j3, j4, j5, j6+POUR_ANGLE + 5.0]), vel=VEL_WORK, acc=ACC)
+                movej(posj([j1, j2, j3, j4, j5, j6+POUR_ANGLE - 5.0]), vel=VEL_WORK, acc=ACC)
             
             movel(p_tray, vel=VEL_MOVE, acc=ACC) # 복귀
 
     # [스푼 정리]
     print("[INFO] 스푼 정리")
-    movel(posx([xg-60, yg, zg+80, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
-    movel(posx([xg-60, yg, zg, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
+    movel(posx([xg + spoon_shift, yg, zg+80, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
+    movel(posx([xg + spoon_shift, yg, zg, rxg, ryg, rzg]), vel=VEL_MOVE, acc=ACC)
     movel(p_grab, vel=VEL_WORK, acc=ACC)
     gripper_control("init")
     movej(posj([0, 0, 90, 0, 90, 0]), vel=VEL_MOVE, acc=ACC) # HOME
@@ -365,8 +371,9 @@ def main(args=None):
         recipe = load_yaml(yaml_path_recipe)
 
         if library and recipe:
-            execute_liquid(library, recipe)
+            # execute_liquid(library, recipe)
             execute_powder(library, recipe)
+            execute_sticks(library, recipe)
             print("\n[SUCCESS] All recipes execution finished.")
         else:
             print("[ERROR] Failed to load YAML files.")
