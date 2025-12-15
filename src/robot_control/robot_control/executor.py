@@ -229,7 +229,7 @@ def execute_powder(library, recipe):
         print(f">> Processing Tray #{tray_idx} (Count: {count})")
 
         p_tray = get_tray_pose(p_tray_base, tray_idx)
-        p_pour = p_pour_list[tray_idx]
+        p_pour = posj(p_pour_list[tray_idx])
 
         for c in range(count):
             print("[INFO] 보울로 이동")
@@ -283,7 +283,7 @@ def execute_powder(library, recipe):
     movej(posj([0, 0, 90, 0, 90, 0]), vel=VEL_MOVE, acc=ACC) # HOME
 
 def execute_sticks(library, recipe):
-    from DSR_ROBOT2 import posx, posj, movel, movej, wait, DR_MV_RA_DUPLICATE
+    from DSR_ROBOT2 import posx, posj, movel, movej
 
     HOME_POSE = posj([0, 0, 90, 0, 90, 0])
     stick_poses = library["stick"]
@@ -329,8 +329,11 @@ def execute_sticks(library, recipe):
         movel(p_tray_down, vel=VEL_WORK, acc=ACC)
 
         for _ in range(3):
-            for p in stir_poses_tray:
-                movel(p, vel=VEL_WORK, acc=ACC, radius=10, ra=DR_MV_RA_DUPLICATE)
+            for i, p in enumerate(stir_poses_tray):
+                if i == len(stir_poses_tray) - 1:
+                    movel(p, vel=VEL_WORK, acc=ACC, radius=0)
+                else:
+                    movel(p, vel=VEL_WORK, acc=ACC, radius=10)
 
         movel(p_tray_up, vel=VEL_MOVE, acc=ACC)
 
