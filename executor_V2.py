@@ -126,11 +126,10 @@ def execute_liquid(library, recipe):
         
         # 타겟 좌표 계산
         p_tray = get_tray_pose(tray_base_raw, tray_idx)
-        p_tray_down = posx(list(p_tray))
-        p_tray_down[2] -= 50.0 # 깊이 조정
+        # p_tray_down = posx(list(p_tray))
+        # p_tray_down[2] -= 50.0 # 깊이 조정
         p_tray_up = posx(list(p_tray))
-        p_tray_up[2] += 50.0
-
+        p_tray_up[2] += 50.0 # 깊이 조정
         for c in range(count):
             # 1) 흡입 (Suction) - v2.0 로직
             print(f"  Loop {c+1}: Suction")
@@ -143,8 +142,7 @@ def execute_liquid(library, recipe):
             # 2) 배출 (Dispense)
             print(f"  Loop {c+1}: Dispense")
             movel(p_tray_up, vel=VEL_MOVE, acc=ACC)
-            movel(p_tray, vel=VEL_MOVE, acc=ACC)
-            # movel(p_tray_down, vel=VEL_WORK, acc=ACC)
+            movel(p_tray, vel=VEL_WORK, acc=ACC)
             gripper_control("squeeze") # 1차 배출
             gripper_control("hold")    # 잔여물 털기
             gripper_control("squeeze") # 2차 배출
