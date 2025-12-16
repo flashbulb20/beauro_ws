@@ -237,7 +237,7 @@ class RobotErrorHandler:
             True: 정상 또는 복구 성공
             False: 작업 중단 필요
         """
-        from DSR_ROBOT2 import get_robot_state, set_robot_mode, get_current_posj
+        from DSR_ROBOT2 import get_robot_state, set_robot_mode, get_current_posj, SetRobotControl
         
         state = get_robot_state()
         
@@ -253,11 +253,9 @@ class RobotErrorHandler:
         
         # 에러 상태 설명
         error_descriptions = {
-            3: "Safe Stop (충돌 또는 외력 감지)",
-            5: "Safe Off (서보 꺼짐)",
+            3: "Safe Off (충돌 또는 외력 감지)",
+            5: "Safe Stop (서보 꺼짐)",
             6: "Emergency Stop (비상정지)",
-            9: "Collision Detected",
-            10: "Teaching Mode"
         }
         print(f"   상태 설명: {error_descriptions.get(state, '알 수 없음')}")
         
@@ -293,11 +291,7 @@ class RobotErrorHandler:
                 return False
         
         # Safe Stop (3) 또는 Safe Off (5) 처리
-        if state == 3:
-            print("🔧 Safe Stop 상태 복구 시도")
-            print("   - 로봇이 외력이나 충돌로 인해 정지했습니다")
-            print("   - 장애물을 제거하고 'c'를 입력하면 자동 복구를 시도합니다\n")
-        elif state == 5:
+        if state == 5:
             print("⚠️ Safe Off 상태")
             print("   - 티치펜던트에서 복구가 필요합니다")
             print("   - 티치펜던트 화면에서:")
@@ -306,6 +300,10 @@ class RobotErrorHandler:
             print("     3. 'Servo On' 버튼 클릭")
             print("     4. 'Auto' 모드로 전환")
             print("   - 완료 후 'c'를 입력하세요\n")
+        elif state == 3:
+            print("🔧 Safe Stop 상태 복구 시도")
+            print("   - 로봇이 외력이나 충돌로 인해 정지했습니다")
+            print("   - 장애물을 제거하고 'c'를 입력하면 자동 복구를 시도합니다\n")
         
         decision = self._wait_user_decision()
         
@@ -317,43 +315,41 @@ class RobotErrorHandler:
         print("\n🔄 로봇 복구 중...")
         
         try:
-            # Safe Stop인 경우 리셋 시도
+            # Safe Off 경우 리셋 시도
             if state == 3:
                 try:
-                    from DSR_ROBOT2 import set_safe_stop_reset_type
+                    from DSR_ROBOT2 import set_safe_stop_reset_type, SetRobotControl
                     print("   → Safe Stop 리셋...")
-                    set_safe_stop_reset_type(0)
+                    req = SetRobotControl.Request()
+                    req.robot_control = 3
                     time.sleep(1.0)
                 except Exception as e:
-                    print(f"   ⚠️ Safe Stop 리셋 실패: {e}")
-            
-            # AUTO 모드로 전환 시도
-            print("   → AUTO 모드 전환...")
-            for attempt in range(3):
+                    print(f"   ⚠️ SAFE OFF 리셋 실패: {e}")
+
+            # Safe Off2 경우 리셋 시도
+            if state == 10:
                 try:
-                    set_robot_mode(1)  # AUTO MODE
-                    time.sleep(1.5)
-                    
-                    # 복구 확인
-                    new_state = get_robot_state()
-                    if new_state not in self.ERROR_STATES:
-                        print("✅ 복구 성공 - 작업 재개\n")
-                        self.state_manager.reset_error()
-                        return True
-                    
-                    if attempt < 2:
-                        print(f"   ⚠️ 복구 실패 (현재 상태: {new_state}) - 재시도 {attempt + 2}/3")
-                        time.sleep(1.0)
-                    
+                    from DSR_ROBOT2 import set_safe_stop_reset_type, SetRobotControl
+                    print("   → Safe Stop 리셋...")
+                    req = SetRobotControl.Request()
+                    req.robot_control = 3
+                    time.sleep(1.0)
                 except Exception as e:
-                    print(f"   ⚠️ 모드 전환 실패 (시도 {attempt + 1}/3): {e}")
-                    if attempt < 2:
-                        time.sleep(1.0)
-            
-            # 3번 시도 후에도 실패
-            final_state = get_robot_state()
-            print(f"\n❌ 자동 복구 실패 (최종 상태: {final_state})")
-            print("티치펜던트에서 수동으로 복구해주세요")
+                    print(f"   ⚠️ SAFE OFF 리셋 실패: {e}")
+                
+            # Safe Stop 경우 리셋 시도
+            if state == 5:
+                try:
+                    from DSR_ROBOT2 import set_safe_stop_reset_type, SetRobotControl
+                    print("   → Safe Stop 리셋...")
+                    set_safe_stop_reset_type(0)
+                    req = SetRobotControl.Request()
+                    req.robot_control = 2
+                    time.sleep(1.0)
+                    req.robot_control = 3
+                    time.sleep(1.0)
+                except Exception as e:
+                    print(f"   ⚠️ SAFE STOP 리셋 실패: {e}")
             
             # 수동 복구 후 재시도 옵션
             print("\n수동 복구 완료 후 다시 시도하시겠습니까?")
