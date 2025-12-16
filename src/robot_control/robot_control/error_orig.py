@@ -5,7 +5,6 @@ import time
 import json
 from enum import Enum
 from typing import Optional, Dict, Any
-from dsr_msgs2.srv import SetRobotControl
 
 # ==========================================
 # 1. 설정 및 상수 (Configuration)
@@ -224,48 +223,11 @@ class TaskStateManager:
 class RobotErrorHandler:
     """로봇 에러 감지 및 복구 처리"""
     
-    ERROR_STATES = {3, 5, 6, 9, 10}
-    MAX_ERROR_COUNT = 5
+    ERROR_STATES = {3, 5, 6, 9, 10}  # DSR_ROBOT2 에러 상태 코드
+    MAX_ERROR_COUNT = 5  # 최대 연속 에러 허용 횟수
     
     def __init__(self, state_manager: TaskStateManager):
         self.state_manager = state_manager
-        self.node = DR_init._dsr_node 
-
-    def _call_set_robot_control(self, control_cmd: int) -> bool:
-        SERVICE_NAME = f'/{ROBOT_ID}/system/set_robot_control'
-        
-        client = self.node.create_client(SetRobotControl, SERVICE_NAME)
-        if not client.wait_for_service(timeout_sec=3.0):
-            self.node.get_logger().error(f'서비스를 찾을 수 없음: {SERVICE_NAME}')
-            return False
-
-        request = SetRobotControl.Request()
-
-        try:
-            request.robot_control = control_cmd 
-        except AttributeError:
-             self.node.get_logger().error("SetRobotControl 요청 필드 이름(robot_control)이 틀렸을 수 있습니다.")
-             return False
-        
-        future = client.call_async(request)
-        
-        while rclpy.ok():
-            rclpy.spin_once(self.node, timeout_sec=0.1) # 짧은 시간동안 스핀
-            if future.done():
-                try:
-                    response = future.result()
-                    # 4. 응답 결과 확인
-                    if response.success:
-                        self.node.get_logger().info(f'SetRobotControl({control_cmd}) 성공')
-                        return True
-                    else:
-                        self.node.get_logger().warn(f'SetRobotControl({control_cmd}) 실패: {response.message}')
-                        return False
-                except Exception as e:
-                    self.node.get_logger().error(f'서비스 호출 중 예외 발생: {e}')
-                    return False
-        
-        return False
     
     def check_and_recover(self) -> bool:
         """
@@ -275,7 +237,7 @@ class RobotErrorHandler:
             True: 정상 또는 복구 성공
             False: 작업 중단 필요
         """
-        from DSR_ROBOT2 import get_robot_state, get_current_posj
+        from DSR_ROBOT2 import get_robot_state, set_robot_mode, get_current_posj, SetRobotControl
         
         state = get_robot_state()
         
@@ -329,7 +291,7 @@ class RobotErrorHandler:
                 return False
         
         # Safe Stop (3) 또는 Safe Off (5) 처리
-        if state == 5 or state == 9:
+        if state == 5:
             print("⚠️ Safe Off 상태")
             print("   - 티치펜던트에서 복구가 필요합니다")
             print("   - 티치펜던트 화면에서:")
@@ -338,7 +300,7 @@ class RobotErrorHandler:
             print("     3. 'Servo On' 버튼 클릭")
             print("     4. 'Auto' 모드로 전환")
             print("   - 완료 후 'c'를 입력하세요\n")
-        elif state == 3 or state == 10:
+        elif state == 3:
             print("🔧 Safe Stop 상태 복구 시도")
             print("   - 로봇이 외력이나 충돌로 인해 정지했습니다")
             print("   - 장애물을 제거하고 'c'를 입력하면 자동 복구를 시도합니다\n")
@@ -351,52 +313,57 @@ class RobotErrorHandler:
         
         # 복구 시도
         print("\n🔄 로봇 복구 중...")
-
+        
         try:
-            # DSR 라이브러리 임포트 중 SetRobotControl은 제거합니다.
-            # from DSR_ROBOT2 import set_safe_stop_reset_type, SetRobotControl # <== 기존
-            from DSR_ROBOT2 import set_safe_stop_reset_type
+            # Safe Off 경우 리셋 시도
+            if state == 3:
+                try:
+                    from DSR_ROBOT2 import set_safe_stop_reset_type, SetRobotControl
+                    print("   → Safe Stop 리셋...")
+                    req = SetRobotControl.Request()
+                    req.robot_control = 3
+                    time.sleep(1.0)
+                except Exception as e:
+                    print(f"   ⚠️ SAFE OFF 리셋 실패: {e}")
 
-            print("   → Safe Stop 리셋...")
-            
-            # 1. Safe Stop Reset Type 설정 (DSR 라이브러리 함수 사용)
-            set_safe_stop_reset_type(2)
-            
-            # 2. 로봇 컨트롤을 SAFE_STOP_RESET (값 2)으로 설정하는 ROS 2 서비스 호출
-            # (값 3은 SAFE_OFF_RESET일 가능성이 높으므로, 여기서는 SAFE_STOP_RESET인 2를 사용합니다.)
-            # SetRobotControl(2)를 ROS 2 서비스 클라이언트 래퍼 함수로 호출
-            print("   → SetRobotControl(2) 호출 (SAFE_STOP_RESET)...")
-            
-            self._call_set_robot_control(3)
-            time.sleep(1.0)
-            self._call_set_robot_control(2)
-            time.sleep(1.0)
-            self._call_set_robot_control(1)
-            time.sleep(3.0)
-
-            new_state = get_robot_state()
-            print(f"   ⭐ 복구 후 현재 상태: {new_state}")
-            
-            if new_state not in self.ERROR_STATES:
-                # 복구가 성공하여 정상 상태로 돌아왔다면, 사용자에게 재개 확인
-                print("\n✅ 로봇 상태 정상 복구 완료. 작업을 재개합니다.")
-                self.state_manager.reset_error()
-                return True
-            else:
-                # 복구 시도 후에도 여전히 에러 상태인 경우
-                print("\n⚠️ 자동 복구 시도 후에도 에러 상태가 지속됩니다.")
-                print("   - 티치펜던트 확인 후 'c'를 입력하여 수동 복구를 시도하거나 's'를 입력하여 중단하세요.")
+            # Safe Off2 경우 리셋 시도
+            if state == 10:
+                try:
+                    from DSR_ROBOT2 import set_safe_stop_reset_type, SetRobotControl
+                    print("   → Safe Stop 리셋...")
+                    req = SetRobotControl.Request()
+                    req.robot_control = 3
+                    time.sleep(1.0)
+                except Exception as e:
+                    print(f"   ⚠️ SAFE OFF 리셋 실패: {e}")
                 
-                decision_after_fail = self._wait_user_decision()
-                if decision_after_fail == "s":
-                    return False
-                
-                # 사용자가 'c'를 선택했다면, 복구 루프를 재시작 (재귀 호출)
-                return self.check_and_recover() # <== 핵심! 함수 재호출
+            # Safe Stop 경우 리셋 시도
+            if state == 5:
+                try:
+                    from DSR_ROBOT2 import set_safe_stop_reset_type, SetRobotControl
+                    print("   → Safe Stop 리셋...")
+                    set_safe_stop_reset_type(0)
+                    req = SetRobotControl.Request()
+                    req.robot_control = 2
+                    time.sleep(1.0)
+                    req.robot_control = 3
+                    time.sleep(1.0)
+                except Exception as e:
+                    print(f"   ⚠️ SAFE STOP 리셋 실패: {e}")
+            
+            # 수동 복구 후 재시도 옵션
+            print("\n수동 복구 완료 후 다시 시도하시겠습니까?")
+            retry = self._wait_user_decision()
+            if retry == "c":
+                return self.check_and_recover()  # 재귀 호출로 다시 확인
+            
+            return False
                 
         except Exception as e:
-            print(f"   ⚠️ 안전 복구 실패: {e}")
-            return False # 예외 발생 시 복구 실패
+            print(f"❌ 복구 중 예외 발생: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     def _wait_user_decision(self) -> str:
         """사용자 결정 대기 (나중에 Web UI로 대체 가능)"""
@@ -868,7 +835,6 @@ def main(args=None):
     rclpy.init(args=args)
     node = rclpy.create_node("recipe_integration", namespace=ROBOT_ID)
     DR_init.__dsr__node = node
-    DR_init._dsr_node = rclpy.create_node("dsr_client_node")
 
     # 상태 관리자 및 에러 핸들러 초기화
     state_mgr = TaskStateManager()

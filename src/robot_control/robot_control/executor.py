@@ -199,7 +199,8 @@ def execute_powder(library, recipe):
     p_scoop_1 = posj(pow_data["scoop_1"]["posj"])
     p_scoop_2 = posj(pow_data["scoop_2"]["posj"])
     p_scoop_3 = posj(pow_data["scoop_3"]["posj"])
-    p_flat = posx(pow_data["flat"]["posx"])
+    flat_pos_list = [posx(p) for p in pow_data["flat"]["posx"]]
+    p_flat_1, p_flat_2, p_flat_3 = flat_pos_list
     
     p_tray_base = pow_data["tray_base"]["posx"]
     p_pour_list = pow_data["pour"]["posj"]
@@ -242,43 +243,39 @@ def execute_powder(library, recipe):
             # 긁기/회전 동작
             print("[INFO] 스쿠핑")
             movej(p_scoop_2, vel=VEL_WORK, acc=ACC)
-            movej(p_scoop_3, vel=VEL_WORK, acc=ACC)
+            j1, j2, j3, j4, j5, j6 = p_scoop_2
+            movej(posj([j1, j2, j3, j4, j5, j6-80]), vel=VEL_WORK, acc=ACC)
             
-            # 들어올리기 (Up)
-            print("[INFO] 스푼 들어올리기")
-            movel(p_flat, vel=VEL_MOVE, acc=ACC)
-
-            # 평탄화 및 털기
-            print("[INFO] 평탄하게 털기")
-            flatten_and_shake(p_flat)
+            movel(p_flat_1, vel=VEL_MOVE, acc=ACC)
+            movel(p_flat_3, vel=VEL_WORK, acc=ACC)
 
             # 2) 붓기 (Pouring)
-            print(f"{c+1}번째 붓기")
+            # print(f"{c+1}번째 붓기")
             
-            print("[INFO] 안전 이송 포즈로 이동 (J6 회전 없이)")
-            movel(p_tray, vel=VEL_MOVE, acc=ACC)
+            # print("[INFO] 안전 이송 포즈로 이동 (J6 회전 없이)")
+            # movel(p_tray, vel=VEL_MOVE, acc=ACC)
 
-            print("[INFO] 붓기 준비 포즈로 이동")
-            movej(p_pour, vel=VEL_MOVE, acc=ACC)
+            # print("[INFO] 붓기 준비 포즈로 이동")
+            # movej(p_pour, vel=VEL_MOVE, acc=ACC)
             
-            # 6번 조인트 회전으로 붓기 시작
-            if powder_key == "powder_A":
-                POUR_ANGLE = -90
-            else:
-                POUR_ANGLE = 90
+            # # 6번 조인트 회전으로 붓기 시작
+            # if powder_key == "powder_A":
+            #     POUR_ANGLE = -90
+            # else:
+            #     POUR_ANGLE = 90
 
-            j1, j2, j3, j4, j5, j6 = p_pour
-            p_pour_j = posj([j1, j2, j3, j4, j5, j6+POUR_ANGLE])
-            print("[INFO] 붓기")
-            movej(p_pour_j, vel=VEL_WORK, acc=ACC)
+            # j1, j2, j3, j4, j5, j6 = p_pour
+            # p_pour_j = posj([j1, j2, j3, j4, j5, j6+POUR_ANGLE])
+            # print("[INFO] 붓기")
+            # movej(p_pour_j, vel=VEL_WORK, acc=ACC)
             
-            # 털기 (Shake)
-            print("[INFO] 잔여물 털기")
-            for _ in range(3):
-                movej(posj([j1, j2, j3, j4, j5, j6+POUR_ANGLE + 5.0]), vel=VEL_WORK, acc=ACC)
-                movej(posj([j1, j2, j3, j4, j5, j6+POUR_ANGLE - 5.0]), vel=VEL_WORK, acc=ACC)
+            # # 털기 (Shake)
+            # print("[INFO] 잔여물 털기")
+            # for _ in range(3):
+            #     movej(posj([j1, j2, j3, j4, j5, j6+POUR_ANGLE + 5.0]), vel=VEL_WORK, acc=ACC)
+            #     movej(posj([j1, j2, j3, j4, j5, j6+POUR_ANGLE - 5.0]), vel=VEL_WORK, acc=ACC)
             
-            movel(p_tray, vel=VEL_MOVE, acc=ACC) # 복귀
+            # movel(p_tray, vel=VEL_MOVE, acc=ACC) # 복귀
 
     # [스푼 정리]
     print("[INFO] 스푼 정리")
@@ -401,10 +398,10 @@ def main(args=None):
         recipe = load_yaml(os.path.join(BASE_DIR, "recipe.yaml"))
 
         if library and recipe:
-            execute_liquid(library, recipe)
+            # execute_liquid(library, recipe)
             execute_powder(library, recipe)
-            execute_sticks(library, recipe)
-            execute_tray(library)
+            # execute_sticks(library, recipe)
+            # execute_tray(library)
             print("\n[SUCCESS] All recipes execution finished.")
         else:
             print("[ERROR] Failed to load YAML files.")

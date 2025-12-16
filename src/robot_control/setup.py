@@ -32,6 +32,7 @@ setup(
             "beauro = robot_control.beauro:main",
             "close_grip = robot_control.close_grip:main",
             "errors = robot_control.errors:main",
+            "error_orig = robot_control.error_orig:main",
             "executor = robot_control.executor:main",
             "go_home = robot_control.go_home:main",
             "open_grip = robot_control.open_grip:main",
