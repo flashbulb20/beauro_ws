@@ -2,7 +2,7 @@
 > **Doosan M0609 협동로봇을 이용한 화장품 원료 배합 자동화 시스템**
 
 ![Robot Status](https://img.shields.io/badge/Robot-Doosan_M0609-blue?style=for-the-badge&logo=robot)
-![ROS2](https://img.shields.io/badge/ROS2-Foxy%2FHumble-green?style=for-the-badge&logo=ros)
+![ROS2](https://img.shields.io/badge/ROS2-Humble-green?style=for-the-badge&logo=ros)
 ![React](https://img.shields.io/badge/Frontend-React-61DAFB?style=for-the-badge&logo=react)
 ![Firebase](https://img.shields.io/badge/DB-Firebase_Realtime-FFCA28?style=for-the-badge&logo=firebase)
 
@@ -115,8 +115,8 @@ cd beauro-project
 ```bash
 cd frontend
 npm install
-npm start
-# 브라우저에서 http://localhost:3000 접속
+npm run dev
+# 브라우저에서 http://localhost:5173 접속
 ```
 
 4. Backend (Monitor) 실행
