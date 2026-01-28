@@ -16,7 +16,7 @@
 3. [주요 기능](#-주요-기능)
 4. [하드웨어 구성](#-하드웨어-구성)
 5. [설치 및 실행 가이드](#-설치-및-실행-가이드)
-6. [시연 영상/스크린샷](#-시연-영상스크린샷)
+6. [시연 영상](https://drive.google.com/file/d/1fFygs5pP03lR3kt_oiNg6Jdbt6Q7ytm2/view?usp=sharing)
 
 ---
 
